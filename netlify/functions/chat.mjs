@@ -1,7 +1,11 @@
 // netlify/functions/chat.mjs  →  POST /api/chat
 // แชทบอทถามตอบเรื่องความคิดเห็นลูกค้า ดึงข้อมูลจาก Supabase เองฝั่งเซิร์ฟเวอร์
 
-const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview"; // รุ่นล่าสุดที่มี free tier
+
+// อ่าน env ได้ทั้งแบบ Netlify.env (Functions v2) และ process.env และตัดช่องว่างที่เผลอวางมา
+const env = (k) => String(globalThis.Netlify?.env?.get(k) ?? process.env[k] ?? "").trim();
+const REQUIRED_ENV = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY"];
+const PRIMARY_MODEL = env("GEMINI_MODEL") || "gemini-3-flash-preview"; // รุ่นล่าสุดที่มี free tier
 const FALLBACK_MODEL = "gemini-2.5-flash";
 const MAX_REVIEWS = 200;
 const MAX_QUESTION = 300;
@@ -42,11 +46,11 @@ function json(body, status = 200) {
 }
 
 async function fetchReviews(limit) {
-  const base = process.env.SUPABASE_URL.replace(/\/+$/, "");
+  const base = env("SUPABASE_URL").replace(/\/+$/, "");
   // ดึงเฉพาะ rating, comment, created_at — ไม่ดึงชื่อ
   const url = `${base}/rest/v1/feedback?select=rating,comment,created_at&order=created_at.desc&limit=${limit}`;
   const res = await fetch(url, {
-    headers: { apikey: process.env.SUPABASE_ANON_KEY, Accept: "application/json" },
+    headers: { apikey: env("SUPABASE_ANON_KEY"), Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
   return res.json();
@@ -105,7 +109,7 @@ async function callGemini(body) {
   for (const model of models) {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": env("GEMINI_API_KEY") },
       body: JSON.stringify(body),
     });
     if (res.ok) {
@@ -137,9 +141,10 @@ function geminiErrorMessage(err) {
 export default async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  const { GEMINI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
-  if (!GEMINI_API_KEY || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return json({ error: "เซิร์ฟเวอร์ยังตั้งค่าไม่ครบ กรุณาแจ้งผู้ดูแลร้าน" }, 500);
+  const missing = REQUIRED_ENV.filter((k) => !env(k));
+  if (missing.length) {
+    console.error("Missing env:", missing.join(", "));
+    return json({ error: `เซิร์ฟเวอร์ยังตั้งค่าไม่ครบ (ขาด ${missing.join(", ")})` }, 500);
   }
 
   let body;
