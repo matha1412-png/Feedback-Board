@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feedback Board · ความคิดเห็นลูกค้า</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --pine: #24503F;
+      --pine-deep: #173A2C;
+      --pine-soft: #E3ECE5;
+      --cream: #FAF6EC;
+      --paper: #FFFDF8;
+      --ink: #1F2A24;
+      --muted: #5E6B63;
+      --line: #E4DCC8;
+      --honey: #C98E2B;
+      --danger: #A23B2A;
+      --danger-soft: #F8E6E1;
+      --serif: "Noto Serif Thai", Georgia, "Times New Roman", serif;
+      --sans: "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--cream);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.65;
+    }
+    h1, h2, h3 { font-family: var(--serif); line-height: 1.3; margin: 0; color: var(--pine-deep); }
+    button, input, textarea { font: inherit; }
+    :focus-visible { outline: 3px solid var(--honey); outline-offset: 2px; border-radius: 6px; }
+
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+    /* ===== Header (menu board) ===== */
+    .board {
+      background: var(--pine-deep);
+      color: var(--cream);
+      padding: 40px 0 36px;
+      border-bottom: 6px solid var(--pine);
+    }
+    .board .wrap { display: flex; gap: 32px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
+    .board h1 { color: var(--cream); font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 700; }
+    .board p { margin: 6px 0 0; color: #CFDDD3; max-width: 46ch; }
+    .score { display: flex; align-items: center; gap: 18px; }
+    .score-num { font-family: var(--serif); font-size: 3.4rem; font-weight: 700; line-height: 1; color: #F3E3BE; }
+    .score-meta { font-size: .95rem; color: #CFDDD3; }
+    .score-meta .stars { font-size: 1.25rem; letter-spacing: 2px; }
+
+    /* ===== Layout ===== */
+    main { padding: 32px 0 60px; }
+    .grid-top { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 28px; align-items: start; }
+    section.panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+    .panel-head h2 { font-size: 1.4rem; }
+    .panel-head .hint { color: var(--muted); font-size: .9rem; }
+    .sticky { position: sticky; top: 20px; }
+
+    /* ===== Form ===== */
+    label.field-label { display: block; font-weight: 600; margin: 16px 0 6px; }
+    label.field-label:first-of-type { margin-top: 0; }
+    .req { color: var(--danger); }
+    .opt { color: var(--muted); font-weight: 400; font-size: .9rem; }
+    .star-picker { display: flex; gap: 4px; }
+    .star-btn {
+      background: none; border: 0; padding: 2px 4px; cursor: pointer;
+      font-size: 2.1rem; line-height: 1; color: #D8CFB8; transition: transform .12s ease, color .12s ease;
+    }
+    .star-btn.on { color: var(--honey); }
+    .star-btn:hover { transform: scale(1.12); }
+    .star-caption { color: var(--muted); font-size: .9rem; min-height: 1.5em; margin-top: 2px; }
+    textarea, input[type="text"] {
+      width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+      background: #fff; color: var(--ink);
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--pine); box-shadow: 0 0 0 3px var(--pine-soft); }
+    .counter { text-align: right; font-size: .8rem; color: var(--muted); margin-top: 4px; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: 0; border-radius: 999px; padding: 11px 22px; cursor: pointer; font-weight: 600;
+      background: var(--pine); color: #fff; transition: background .15s ease;
+    }
+    .btn:hover { background: var(--pine-deep); }
+    .btn:disabled { background: #9BB0A4; cursor: not-allowed; }
+    .btn.full { width: 100%; margin-top: 18px; }
+    .btn.ghost { background: transparent; color: var(--pine); border: 1px solid var(--pine); }
+    .btn.ghost:hover { background: var(--pine-soft); }
+
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: .92rem; display: none; }
+    .msg.show { display: block; }
+    .msg.ok { background: var(--pine-soft); color: var(--pine-deep); }
+    .msg.err { background: var(--danger-soft); color: var(--danger); }
+
+    /* ===== Feedback list ===== */
+    .list { display: grid; gap: 14px; }
+    .card {
+      background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;
+      border-left: 4px solid var(--pine);
+    }
+    .card.low { border-left-color: var(--danger); }
+    .card.mid { border-left-color: var(--honey); }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .card .stars { color: var(--honey); letter-spacing: 2px; font-size: 1.05rem; }
+    .card .stars .off { color: #DDD4BF; }
+    .card time { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+    .card p { margin: 8px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .card .who { color: var(--muted); font-size: .9rem; }
+    .empty, .loading { text-align: center; color: var(--muted); padding: 30px 10px; }
+    .more-row { text-align: center; margin-top: 16px; }
+
+    /* ===== AI section ===== */
+    .ai-section { margin-top: 28px; }
+    .ai-section > .panel-head { margin-bottom: 18px; }
+    .grid-ai { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+    .ai-section h3 { font-size: 1.15rem; margin-bottom: 6px; }
+    .ai-section .sub { color: var(--muted); font-size: .92rem; margin: 0 0 14px; }
+
+    .status { display: none; align-items: center; gap: 10px; color: var(--pine); font-size: .95rem; margin-top: 14px; }
+    .status.show { display: flex; }
+    .spinner { width: 18px; height: 18px; border: 2.5px solid var(--pine-soft); border-top-color: var(--pine); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .summary { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; display: none; }
+    .summary.show { display: block; }
+    .summary-head { padding: 14px 18px; background: var(--pine-soft); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .summary-head strong { font-family: var(--serif); color: var(--pine-deep); }
+    .badge { padding: 3px 12px; border-radius: 999px; font-size: .88rem; font-weight: 600; }
+    .badge.pos { background: var(--pine); color: #fff; }
+    .badge.neu { background: #EFE3C7; color: #7A5A17; }
+    .badge.neg { background: var(--danger); color: #fff; }
+    .summary-body { padding: 16px 18px; }
+    .summary-body > p { margin: 0 0 14px; }
+    .summary-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .summary-cols h4 { margin: 0 0 6px; font-size: .95rem; }
+    .summary-cols ul { margin: 0; padding-left: 20px; }
+    .summary-cols li { margin-bottom: 4px; }
+    .good h4 { color: var(--pine); }
+    .fix h4 { color: #8A5A10; }
+    .summary-foot { color: var(--muted); font-size: .82rem; padding: 0 18px 14px; }
+
+    /* Chat */
+    .chat { border: 1px solid var(--line); border-radius: 12px; background: #fff; display: flex; flex-direction: column; height: 460px; }
+    .chat-log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .bubble { max-width: 82%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .95rem; }
+    .bubble.user { align-self: flex-end; background: var(--pine); color: #fff; border-bottom-right-radius: 4px; }
+    .bubble.ai { align-self: flex-start; background: var(--cream); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+    .bubble.err { align-self: flex-start; background: var(--danger-soft); color: var(--danger); }
+    .bubble.typing { color: var(--muted); font-style: italic; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 10px; }
+    .chip { border: 1px solid var(--pine); color: var(--pine); background: transparent; border-radius: 999px; padding: 5px 12px; font-size: .85rem; cursor: pointer; }
+    .chip:hover { background: var(--pine-soft); }
+    .chip:disabled { opacity: .5; cursor: not-allowed; }
+    .chat-form { display: flex; gap: 8px; border-top: 1px solid var(--line); padding: 10px; align-items: flex-end; }
+    .chat-form textarea { min-height: 44px; height: 44px; max-height: 120px; resize: none; }
+    .chat-form .btn { padding: 10px 18px; flex-shrink: 0; }
+    .chat-counter { font-size: .78rem; color: var(--muted); padding: 0 12px 8px; text-align: right; }
+
+    footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 0 20px 30px; }
+
+    @media (max-width: 900px) {
+      .grid-top, .grid-ai { grid-template-columns: 1fr; }
+      .sticky { position: static; }
+    }
+    @media (max-width: 560px) {
+      .board { padding: 28px 0 24px; }
+      .score-num { font-size: 2.7rem; }
+      section.panel { padding: 18px; }
+      .summary-cols { grid-template-columns: 1fr; }
+      .bubble { max-width: 90%; }
+      .chat { height: 420px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="board">
+    <div class="wrap">
+      <div>
+        <h1>ความคิดเห็นจากลูกค้า</h1>
+        <p>เล่าให้เราฟังหน่อยว่าวันนี้อาหาร เครื่องดื่ม และบริการเป็นอย่างไร ทุกความเห็นช่วยให้ร้านดีขึ้น</p>
+      </div>
+      <div class="score" aria-live="polite">
+        <div class="score-num" id="avgNum">–</div>
+        <div class="score-meta">
+          <div class="stars" id="avgStars" aria-hidden="true">☆☆☆☆☆</div>
+          <div id="totalText">กำลังโหลด...</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="grid-top">
+
+      <!-- ส่วนที่ 1: เขียนความคิดเห็น -->
+      <section class="panel sticky" aria-labelledby="h-write">
+        <div class="panel-head"><h2 id="h-write">เขียนความคิดเห็น</h2></div>
+        <form id="feedbackForm" novalidate>
+          <label class="field-label" id="ratingLabel">ให้คะแนน <span class="req">*</span></label>
+          <div class="star-picker" id="starPicker" role="radiogroup" aria-labelledby="ratingLabel"></div>
+          <div class="star-caption" id="starCaption">แตะดาวเพื่อให้คะแนน</div>
+
+          <label class="field-label" for="comment">ความคิดเห็น <span class="req">*</span></label>
+          <textarea id="comment" maxlength="1000" placeholder="เช่น กาแฟหอมมาก แต่รอคิวนานไปหน่อย"></textarea>
+          <div class="counter"><span id="commentCount">0</span>/1000</div>
+
+          <label class="field-label" for="name">ชื่อ <span class="opt">(ไม่บังคับ)</span></label>
+          <input type="text" id="name" maxlength="50" placeholder="เว้นว่างได้" autocomplete="nickname" />
+
+          <button type="submit" class="btn full" id="submitBtn">ส่งความคิดเห็น</button>
+          <div class="msg" id="formMsg" role="status"></div>
+        </form>
+      </section>
+
+      <!-- ส่วนที่ 2: ความคิดเห็นทั้งหมด -->
+      <section class="panel" aria-labelledby="h-list">
+        <div class="panel-head">
+          <h2 id="h-list">ความคิดเห็นทั้งหมด</h2>
+          <span class="hint">ใหม่ล่าสุดอยู่บนสุด</span>
+        </div>
+        <div class="list" id="feedbackList"><div class="loading">กำลังโหลดความคิดเห็น...</div></div>
+        <div class="more-row"><button class="btn ghost" id="loadMoreBtn" hidden>โหลดเพิ่ม</button></div>
+      </section>
+    </div>
+
+    <!-- ส่วนที่ 3: AI วิเคราะห์ -->
+    <section class="panel ai-section" aria-labelledby="h-ai">
+      <div class="panel-head">
+        <h2 id="h-ai">AI วิเคราะห์ความคิดเห็น</h2>
+        <span class="hint">ใช้ความคิดเห็นล่าสุดไม่เกิน 200 รายการ</span>
+      </div>
+
+      <div class="grid-ai">
+        <div>
+          <h3>สรุปรีวิวทั้งหมด</h3>
+          <p class="sub">ภาพรวม จุดเด่น และสิ่งที่ควรปรับ จากความคิดเห็นของลูกค้า</p>
+          <button class="btn" id="analyzeBtn">ให้ AI สรุปรีวิว</button>
+          <div class="status" id="analyzeStatus"><span class="spinner"></span><span>กำลังวิเคราะห์...</span></div>
+          <div class="msg err" id="analyzeErr" role="alert"></div>
+
+          <div class="summary" id="summaryCard" aria-live="polite">
+            <div class="summary-head">
+              <strong>ผลการวิเคราะห์</strong>
+              <span class="badge" id="sentimentBadge"></span>
+            </div>
+            <div class="summary-body">
+              <p id="sumOverview"></p>
+              <div class="summary-cols">
+                <div class="good"><h4>จุดเด่น</h4><ul id="sumStrengths"></ul></div>
+                <div class="fix"><h4>จุดที่ควรปรับ</h4><ul id="sumImprove"></ul></div>
+              </div>
+            </div>
+            <div class="summary-foot" id="sumFoot"></div>
+          </div>
+        </div>
+
+        <div>
+          <h3>ถาม AI เกี่ยวกับความคิดเห็นลูกค้า</h3>
+          <p class="sub">AI ตอบจากความคิดเห็นที่ลูกค้าเขียนไว้เท่านั้น</p>
+          <div class="chat">
+            <div class="chat-log" id="chatLog" aria-live="polite">
+              <div class="bubble ai">สวัสดีครับ ถามเรื่องความคิดเห็นของลูกค้าได้เลย หรือเลือกคำถามด้านล่าง</div>
+            </div>
+            <div class="chips" id="chips">
+              <button class="chip" type="button">ลูกค้าบ่นเรื่องอะไรมากที่สุด</button>
+              <button class="chip" type="button">รีวิว 1-2 ดาวส่วนใหญ่พูดถึงอะไร</button>
+              <button class="chip" type="button">สัปดาห์นี้คะแนนเฉลี่ยดีขึ้นหรือแย่ลง</button>
+            </div>
+            <form class="chat-form" id="chatForm">
+              <textarea id="chatInput" maxlength="300" placeholder="พิมพ์คำถาม (ไม่เกิน 300 ตัวอักษร)" aria-label="คำถาม"></textarea>
+              <button class="btn" id="chatSend" type="submit">ส่ง</button>
+            </form>
+            <div class="chat-counter"><span id="chatCount">0</span>/300</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>ข้อมูลที่ส่งให้ AI มีเฉพาะคะแนน ข้อความ และเวลา ไม่รวมชื่อผู้เขียน</footer>
+
+  <script>
+    // ============ ตั้งค่า Supabase (anon/publishable key เปิดเผยได้ เพราะป้องกันด้วย RLS) ============
+    const SUPABASE_URL = "https://iqamqexpbqrcreynwdrr.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_gc8W3Se_oZCcxLvYkgXjHw_unGgAUPB";
+
+    // ใช้ชื่อ supabaseClient เพื่อไม่ชนกับ global object "supabase" ของไลบรารี
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const PAGE_SIZE = 30;
+    const RATING_TEXT = ["", "แย่มาก", "ไม่ค่อยดี", "พอใช้", "ดี", "ดีมาก"];
+    const $ = (id) => document.getElementById(id);
+
+    // ---------- Utilities ----------
+    function starsText(n) { const r = Math.round(n); return "★".repeat(r) + "☆".repeat(5 - r); }
+
+    function relTime(iso) {
+      const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+      if (s < 45) return "เมื่อสักครู่";
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${Math.max(1, m)} นาทีที่แล้ว`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h} ชั่วโมงที่แล้ว`;
+      const d = Math.floor(h / 24);
+      if (d < 7) return `${d} วันที่แล้ว`;
+      if (d < 30) return `${Math.floor(d / 7)} สัปดาห์ที่แล้ว`;
+      if (d < 365) return `${Math.floor(d / 30)} เดือนที่แล้ว`;
+      return `${Math.floor(d / 365)} ปีที่แล้ว`;
+    }
+    function fullDate(iso) {
+      return new Date(iso).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+    }
+    function showMsg(el, text, type) {
+      el.textContent = text;
+      el.className = `msg show ${type}`;
+    }
+    function hideMsg(el) { el.className = el.className.replace(" show", ""); el.textContent = ""; }
+
+    // ---------- Stats ----------
+    async function loadStats() {
+      const { data, error } = await supabaseClient.from("feedback_stats").select("total, avg_rating").single();
+      if (error) {
+        $("totalText").textContent = "โหลดสถิติไม่สำเร็จ";
+        return;
+      }
+      const total = data.total || 0;
+      const avg = Number(data.avg_rating || 0);
+      $("avgNum").textContent = total ? avg.toFixed(1) : "–";
+      $("avgStars").textContent = total ? starsText(avg) : "☆☆☆☆☆";
+      $("totalText").textContent = total ? `จาก ${total.toLocaleString("th-TH")} ความคิดเห็น` : "ยังไม่มีความคิดเห็น";
+    }
+
+    // ---------- Feedback list ----------
+    let loadedCount = 0;
+
+    function renderCard(row) {
+      const card = document.createElement("article");
+      card.className = "card" + (row.rating <= 2 ? " low" : row.rating === 3 ? " mid" : "");
+
+      const top = document.createElement("div");
+      top.className = "card-top";
+      const stars = document.createElement("span");
+      stars.className = "stars";
+      stars.setAttribute("aria-label", `${row.rating} จาก 5 ดาว`);
+      stars.append("★".repeat(row.rating));
+      const off = document.createElement("span");
+      off.className = "off";
+      off.textContent = "★".repeat(5 - row.rating);
+      stars.append(off);
+
+      const time = document.createElement("time");
+      time.dateTime = row.created_at;
+      time.dataset.rel = row.created_at;
+      time.title = fullDate(row.created_at);
+      time.textContent = relTime(row.created_at);
+      top.append(stars, time);
+
+      const p = document.createElement("p");
+      p.textContent = row.comment;              // textContent กัน XSS
+      const who = document.createElement("div");
+      who.className = "who";
+      who.textContent = "— " + (row.name && row.name.trim() ? row.name.trim() : "ไม่ระบุชื่อ");
+
+      card.append(top, p, who);
+      return card;
+    }
+
+    async function loadFeedback(reset = true) {
+      const list = $("feedbackList");
+      const moreBtn = $("loadMoreBtn");
+      if (reset) loadedCount = 0;
+      moreBtn.disabled = true;
+
+      const { data, error } = await supabaseClient
+        .from("feedback")
+        .select("id, rating, comment, name, created_at")
+        .order("created_at", { ascending: false })
+        .range(loadedCount, loadedCount + PAGE_SIZE - 1);
+
+      moreBtn.disabled = false;
+      if (error) {
+        if (reset) list.innerHTML = '<div class="empty">โหลดความคิดเห็นไม่สำเร็จ กรุณารีเฟรชหน้าอีกครั้ง</div>';
+        return;
+      }
+      if (reset) list.innerHTML = "";
+      if (reset && data.length === 0) {
+        list.innerHTML = '<div class="empty">ยังไม่มีความคิดเห็น เป็นคนแรกที่เขียนได้เลย</div>';
+      }
+      data.forEach((row) => list.append(renderCard(row)));
+      loadedCount += data.length;
+      moreBtn.hidden = data.length < PAGE_SIZE;
+    }
+
+    $("loadMoreBtn").addEventListener("click", () => loadFeedback(false));
+
+    // อัปเดตเวลาแบบ relative ทุก 1 นาที
+    setInterval(() => {
+      document.querySelectorAll("time[data-rel]").forEach((t) => (t.textContent = relTime(t.dataset.rel)));
+    }, 60000);
+
+    // ---------- Star picker ----------
+    let rating = 0;
+    const picker = $("starPicker");
+    for (let i = 1; i <= 5; i++) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "star-btn";
+      b.textContent = "★";
+      b.dataset.value = i;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-label", `${i} ดาว – ${RATING_TEXT[i]}`);
+      b.setAttribute("aria-checked", "false");
+      b.addEventListener("click", () => setRating(i));
+      b.addEventListener("mouseenter", () => paintStars(i));
+      b.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); setRating(Math.min(5, (rating || 0) + 1)); focusStar(); }
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); setRating(Math.max(1, (rating || 2) - 1)); focusStar(); }
+      });
+      picker.append(b);
+    }
+    picker.addEventListener("mouseleave", () => paintStars(rating));
+
+    function paintStars(n) {
+      picker.querySelectorAll(".star-btn").forEach((b) => b.classList.toggle("on", Number(b.dataset.value) <= n));
+    }
+    function setRating(n) {
+      rating = n;
+      paintStars(n);
+      picker.querySelectorAll(".star-btn").forEach((b) => {
+        const on = Number(b.dataset.value) === n;
+        b.setAttribute("aria-checked", on ? "true" : "false");
+        b.tabIndex = on || (n === 0 && b.dataset.value === "1") ? 0 : -1;
+      });
+      $("starCaption").textContent = n ? `${n} ดาว · ${RATING_TEXT[n]}` : "แตะดาวเพื่อให้คะแนน";
+    }
+    function focusStar() { picker.querySelector(`[data-value="${rating}"]`)?.focus(); }
+    setRating(0);
+
+    $("comment").addEventListener("input", (e) => ($("commentCount").textContent = e.target.value.length));
+
+    // ---------- Submit ----------
+    $("feedbackForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = $("formMsg");
+      hideMsg(msg);
+      const comment = $("comment").value.trim();
+      const name = $("name").value.trim();
+
+      if (rating < 1 || rating > 5) return showMsg(msg, "กรุณาเลือกคะแนน 1–5 ดาว", "err");
+      if (!comment) { $("comment").focus(); return showMsg(msg, "กรุณาเขียนความคิดเห็นก่อนส่ง", "err"); }
+
+      const btn = $("submitBtn");
+      btn.disabled = true;
+      btn.textContent = "กำลังส่ง...";
+
+      const { error } = await supabaseClient.from("feedback").insert({
+        rating,
+        comment,
+        name: name || null,
+      });
+
+      btn.disabled = false;
+      btn.textContent = "ส่งความคิดเห็น";
+
+      if (error) {
+        console.error(error);
+        return showMsg(msg, "ส่งไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง", "err");
+      }
+      $("feedbackForm").reset();
+      $("commentCount").textContent = "0";
+      setRating(0);
+      showMsg(msg, "ส่งความคิดเห็นแล้ว ขอบคุณที่แบ่งปันกับเรา", "ok");
+      loadFeedback(true);
+      loadStats();
+    });
+
+    // ---------- API helper (เรียก Netlify Function) ----------
+    async function apiPost(path, body, timeoutMs = 45000) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body || {}),
+          signal: ctrl.signal,
+        });
+        let data = {};
+        try { data = await res.json(); } catch { /* ไม่ใช่ JSON */ }
+        if (!res.ok) throw new Error(data.error || "ระบบ AI ขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง");
+        return data;
+      } catch (err) {
+        if (err.name === "AbortError") throw new Error("AI ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง");
+        if (err instanceof TypeError) throw new Error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต");
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // ---------- AI Summary ----------
+    $("analyzeBtn").addEventListener("click", async () => {
+      const btn = $("analyzeBtn");
+      const status = $("analyzeStatus");
+      const errBox = $("analyzeErr");
+      hideMsg(errBox);
+      btn.disabled = true;
+      status.classList.add("show");
+
+      try {
+        const data = await apiPost("/api/analyze");
+        renderSummary(data);
+      } catch (err) {
+        showMsg(errBox, err.message, "err");
+      } finally {
+        btn.disabled = false;
+        status.classList.remove("show");
+      }
+    });
+
+    function fillList(ul, items) {
+      ul.innerHTML = "";
+      (items || []).forEach((t) => {
+        const li = document.createElement("li");
+        li.textContent = t;
+        ul.append(li);
+      });
+      if (!ul.children.length) {
+        const li = document.createElement("li");
+        li.textContent = "ยังไม่มีข้อมูลเพียงพอ";
+        ul.append(li);
+      }
+    }
+
+    function renderSummary(d) {
+      const badge = $("sentimentBadge");
+      const map = { "บวก": "pos", "กลาง": "neu", "ลบ": "neg" };
+      badge.className = "badge " + (map[d.sentiment] || "neu");
+      badge.textContent = "Sentiment: " + (d.sentiment || "กลาง");
+      $("sumOverview").textContent = d.summary || "";
+      fillList($("sumStrengths"), d.strengths);
+      fillList($("sumImprove"), d.improvements);
+      $("sumFoot").textContent = `วิเคราะห์จาก ${d.count} รายการล่าสุด · คะแนนเฉลี่ย ${d.average}`;
+      $("summaryCard").classList.add("show");
+    }
+
+    // ---------- Chatbot ----------
+    const chatLog = $("chatLog");
+    const chatInput = $("chatInput");
+    const chatSend = $("chatSend");
+    const chips = document.querySelectorAll(".chip");
+    const history = []; // [{ role: "user" | "model", text }]
+    let chatBusy = false;
+
+    function addBubble(text, cls) {
+      const b = document.createElement("div");
+      b.className = "bubble " + cls;
+      b.textContent = text;
+      chatLog.append(b);
+      chatLog.scrollTop = chatLog.scrollHeight;
+      return b;
+    }
+    function setChatBusy(v) {
+      chatBusy = v;
+      chatSend.disabled = v;
+      chatInput.disabled = v;
+      chips.forEach((c) => (c.disabled = v));
+    }
+
+    async function ask(question) {
+      question = question.trim();
+      if (!question || chatBusy) return;
+      if (question.length > 300) {
+        addBubble("คำถามยาวเกิน 300 ตัวอักษร กรุณาสั้นลงอีกนิด", "err");
+        return;
+      }
+      addBubble(question, "user");
+      chatInput.value = "";
+      $("chatCount").textContent = "0";
+      setChatBusy(true);
+      const typing = addBubble("กำลังค้นในความคิดเห็น...", "ai typing");
+
+      try {
+        const data = await apiPost("/api/chat", { question, history: history.slice(-6) });
+        typing.remove();
+        addBubble(data.reply, "ai");
+        history.push({ role: "user", text: question }, { role: "model", text: data.reply });
+      } catch (err) {
+        typing.remove();
+        addBubble(err.message, "err");
+      } finally {
+        setChatBusy(false);
+        chatInput.focus();
+      }
+    }
+
+    $("chatForm").addEventListener("submit", (e) => { e.preventDefault(); ask(chatInput.value); });
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(chatInput.value); }
+    });
+    chatInput.addEventListener("input", () => ($("chatCount").textContent = chatInput.value.length));
+    chips.forEach((c) => c.addEventListener("click", () => ask(c.textContent)));
+
+    // ---------- Init ----------
+    loadStats();
+    loadFeedback(true);
+  </script>
+</body>
+</html>
